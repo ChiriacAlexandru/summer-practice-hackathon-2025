@@ -10,9 +10,10 @@ import { getCurrentUser } from "../utils/auth";
 
 const API_URL = "http://localhost:3000/api/projects";
 const COMMENTS_API_URL = "http://localhost:3000/api/comments";
+const SUGGESTIONS_API_URL = "http://localhost:3000/api/suggestions"; // NOUĂ
 
 const ProjectView = () => {
-  const { projectId } = useParams(); // LĂSAT cum era
+  const { projectId } = useParams();
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
 
@@ -72,8 +73,9 @@ const ProjectView = () => {
 
       setProject(processedProject);
       
-      // Încarcă comentariile din noua rută
+      // Încarcă comentariile și sugestiile
       await fetchComments();
+      await fetchSuggestions(); // NOUĂ
 
     } catch (error) {
       console.error("Eroare la obținerea proiectului:", {
@@ -87,7 +89,7 @@ const ProjectView = () => {
     }
   };
 
-  // NOUĂ - Funcție separată pentru comentarii
+  // Funcție separată pentru comentarii
   const fetchComments = async () => {
     try {
       console.log("📝 Încărcare comentarii pentru proiectul:", projectId);
@@ -100,7 +102,20 @@ const ProjectView = () => {
     }
   };
 
-  // ACTUALIZAT - Folosește noua rută de comentarii
+  // NOUĂ - Funcție separată pentru sugestii
+  const fetchSuggestions = async () => {
+    try {
+      console.log("💡 Încărcare sugestii pentru proiectul:", projectId);
+      const response = await axios.get(`${SUGGESTIONS_API_URL}/${projectId}`);
+      setSuggestions(response.data);
+      console.log("✅ Sugestii încărcate:", response.data.length);
+    } catch (error) {
+      console.error("❌ Eroare la încărcarea sugestiilor:", error);
+      setSuggestions([]);
+    }
+  };
+
+  // Folosește noua rută de comentarii
   const handleSubmitComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim() || isSubmittingComment) return;
@@ -133,6 +148,7 @@ const ProjectView = () => {
     }
   };
 
+  // ACTUALIZAT - Folosește noua rută de sugestii
   const handleSubmitSuggestion = async (e) => {
     e.preventDefault();
     if (!newSuggestion.trim() || isSubmittingSuggestion) return;
@@ -140,18 +156,26 @@ const ProjectView = () => {
     setIsSubmittingSuggestion(true);
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`${API_URL}/${projectId}/suggestions`, {
-        text: newSuggestion.trim(),
-        author: currentUser.id
+      
+      console.log("💡 Trimitere sugestie:", {
+        projectId,
+        suggestion: newSuggestion.trim()
+      });
+
+      await axios.post(SUGGESTIONS_API_URL, {
+        projectId: projectId,
+        suggestion: newSuggestion.trim()
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      await fetchProject();
+      // Reîncarcă sugestiile
+      await fetchSuggestions();
       setNewSuggestion("");
+      console.log("✅ Sugestie adăugată cu succes");
     } catch (error) {
-      console.error("Eroare la adăugarea sugestiei:", error);
-      alert("Eroare la adăugarea sugestiei");
+      console.error("❌ Eroare la adăugarea sugestiei:", error);
+      alert("Eroare la adăugarea sugestiei: " + (error.response?.data?.message || error.message));
     } finally {
       setIsSubmittingSuggestion(false);
     }
@@ -172,7 +196,7 @@ const ProjectView = () => {
     }
   };
 
-  // NOUĂ - Ștergere comentariu
+  // Ștergere comentariu
   const handleDeleteComment = async (commentId) => {
     if (!window.confirm("Sigur doriți să ștergeți acest comentariu?")) return;
 
@@ -187,6 +211,24 @@ const ProjectView = () => {
     } catch (error) {
       console.error("❌ Eroare la ștergerea comentariului:", error);
       alert("Eroare la ștergerea comentariului: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  // NOUĂ - Ștergere sugestie
+  const handleDeleteSuggestion = async (suggestionId) => {
+    if (!window.confirm("Sigur doriți să ștergeți această sugestie?")) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${SUGGESTIONS_API_URL}/${suggestionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      await fetchSuggestions();
+      console.log("✅ Sugestie ștearsă cu succes");
+    } catch (error) {
+      console.error("❌ Eroare la ștergerea sugestiei:", error);
+      alert("Eroare la ștergerea sugestiei: " + (error.response?.data?.message || error.message));
     }
   };
 
@@ -494,12 +536,22 @@ const ProjectView = () => {
                         {suggestions.map(suggestion => (
                           <div key={suggestion._id} className="bg-yellow-50 rounded-lg p-4 border-l-4 border-yellow-400">
                             <div className="flex justify-between mb-2">
-                              <span className="font-medium">{suggestion.author?.name || "Anonim"}</span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(suggestion.createdAt).toLocaleDateString('ro-RO')}
-                              </span>
+                              <span className="font-medium">{suggestion.authorId?.name || "Anonim"}</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-gray-500">
+                                  {new Date(suggestion.createdAt).toLocaleDateString('ro-RO')}
+                                </span>
+                                {currentUser.id === suggestion.authorId?._id && (
+                                  <button
+                                    onClick={() => handleDeleteSuggestion(suggestion._id)}
+                                    className="text-red-500 hover:text-red-700 text-xs"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <p>{suggestion.text}</p>
+                            <p>{suggestion.suggestion}</p>
                           </div>
                         ))}
                       </div>

@@ -49,6 +49,8 @@ const loadRoutes = () => {
   const projectsRouter = require('./Routes/project');
   const teamsRouter = require('./Routes/team');
 const commentsRouter = require("./Routes/comments");
+const suggestionRoutes = require('./Routes/suggestions');
+app.use('/api/suggestions', suggestionRoutes);
   app.use('/api/users', usersRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/teams', teamsRouter);
