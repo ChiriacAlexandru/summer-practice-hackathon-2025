@@ -6,12 +6,13 @@ import NotFound from './Pages/NotFound';
 import Teams from './Pages/Teams';
 import Project from './Pages/Projects';
 import ProjectView from './Pages/ProjectView';
-
+import Header from './components/Header';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const App = () => {
   return (
     <Router>
+      <Header />
       <Routes>
         <Route path="/login" element={<Auth />} />
 

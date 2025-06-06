@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Code, Plus, Search, Settings, Eye, Edit, Trash2, 
   Tag, Calendar, User, Users, Github, ExternalLink, X, Clock
@@ -11,6 +12,7 @@ const TEAMS_API_URL = "http://localhost:3000/api/teams";
 
 const Projects = () => {
   const currentUser = getCurrentUser();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("my-projects");
   const [searchTerm, setSearchTerm] = useState("");
@@ -46,6 +48,11 @@ const Projects = () => {
       "bg-orange-500", "bg-red-500", "bg-indigo-500", "bg-pink-500", "bg-teal-500"
     ];
     return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  // Funcție pentru navigarea către pagina proiectului
+  const handleProjectClick = (projectId) => {
+    navigate(`/projects/${projectId}`);
   };
 
   // Helper pentru a verifica dacă utilizatorul este membru al unei echipe
@@ -619,7 +626,10 @@ const Projects = () => {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex-1">
-                                <h3 className="text-base lg:text-lg font-semibold text-gray-900 truncate">
+                                <h3 
+                                  onClick={() => handleProjectClick(project._id)}
+                                  className="text-base lg:text-lg font-semibold text-gray-900 truncate cursor-pointer hover:text-blue-600 transition-colors"
+                                >
                                   {project.title}
                                 </h3>
                                 {/* Indicator pentru tipul de proiect */}
@@ -731,7 +741,10 @@ const Projects = () => {
                         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between mb-2">
-                              <h3 className="text-base lg:text-lg font-semibold text-gray-900 flex-1">
+                              <h3 
+                                onClick={() => handleProjectClick(project._id)}
+                                className="text-base lg:text-lg font-semibold text-gray-900 flex-1 cursor-pointer hover:text-blue-600 transition-colors"
+                              >
                                 {project.title}
                               </h3>
                               <button
