@@ -23,9 +23,14 @@ const Auth = () => {
       });
 
       setSuccess('Autentificare reușită!');
-      localStorage.setItem('token', response.data.token);
+      
+      // Salvează tokenul și expirarea într-o oră
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 oră
 
-      // Redirect către homepage
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('token_expiry', expiresAt.toISOString());
+
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Eroare la conectare.');
@@ -53,7 +58,7 @@ const Auth = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg"
                   placeholder="exemplu@email.com"
                   required
                 />
@@ -71,14 +76,14 @@ const Auth = () => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg"
                   placeholder="Introduceți parola"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -90,7 +95,7 @@ const Auth = () => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium"
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700"
             >
               Conectează-te
             </button>
