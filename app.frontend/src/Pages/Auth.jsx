@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -95,11 +95,24 @@ const Auth = () => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700"
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-200"
             >
               Conectează-te
             </button>
           </form>
+
+          {/* Link către înregistrare */}
+          <div className="mt-6 text-center">
+            <p className="text-gray-600 text-sm">
+              Nu aveți cont?{' '}
+              <Link 
+                to="/register" 
+                className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors duration-200"
+              >
+                Înregistrează-te aici
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>

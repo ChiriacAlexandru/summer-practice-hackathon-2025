@@ -467,18 +467,7 @@ const Teams = () => {
                   <span className="sm:hidden">Disponibile </span>
                   ({availableTeams.length})
                 </button>
-                <button
-                  onClick={() => setActiveTab("requests")}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                    activeTab === "requests"
-                      ? "border-blue-500 text-blue-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  <span className="hidden sm:inline">Cereri Pending </span>
-                  <span className="sm:hidden">Cereri </span>
-                  ({pendingRequests.length})
-                </button>
+               
               </nav>
             </div>
           </div>

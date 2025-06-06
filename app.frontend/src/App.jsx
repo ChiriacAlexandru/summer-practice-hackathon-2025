@@ -8,6 +8,7 @@ import Project from './Pages/Projects';
 import ProjectView from './Pages/ProjectView';
 import Header from './components/Header';
 import ProtectedRoute from './components/ProtectedRoute';
+import Register from './Pages/Register';
 
 const App = () => {
   return (
@@ -15,6 +16,7 @@ const App = () => {
       <Header />
       <Routes>
         <Route path="/login" element={<Auth />} />
+        <Route path="/register" element={<Register />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<Teams />} />

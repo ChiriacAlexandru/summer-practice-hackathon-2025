@@ -1,8 +1,10 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { UserCircleIcon } from '@heroicons/react/24/outline'; // Opțional
+import { Link, useNavigate } from 'react-router-dom';
+import { UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 
 const Header = () => {
+  const navigate = useNavigate();
+
   // Funcție pentru a extrage username-ul din token
   const getUsernameFromToken = () => {
     try {
@@ -15,6 +17,19 @@ const Header = () => {
       console.error('Eroare la decodarea token-ului:', error);
       return null;
     }
+  };
+
+  // Funcție pentru deconectare
+  const handleLogout = () => {
+    // Șterge token-ul din localStorage
+    localStorage.removeItem('token');
+    
+    // Opțional: șterge și alte date de autentificare dacă există
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    
+    // Redirecționează către pagina de login sau home
+    navigate('/login'); // sau navigate('/') dacă ai o pagină home
   };
 
   const username = getUsernameFromToken();
@@ -44,15 +59,22 @@ const Header = () => {
             </nav>
           </div>
           
-          {/* Username în dreapta */}
-          <div className="flex items-center">
+          {/* Username și buton de deconectare */}
+          <div className="flex items-center space-x-3">
             {username ? (
-              <div className="flex items-center space-x-2 bg-gray-50 px-3 py-2 rounded-full">
-                <UserCircleIcon className="h-5 w-5 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">
-                  {username}
-                </span>
-              </div>
+              <>
+               
+                
+                {/* Buton de deconectare */}
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center space-x-1 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 px-3 py-2 rounded-full transition-colors duration-200 text-sm font-medium"
+                  title="Deconectare"
+                >
+                  <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Deconectare</span>
+                </button>
+              </>
             ) : (
               <div className="flex items-center space-x-2 bg-red-50 px-3 py-2 rounded-full">
                 <UserCircleIcon className="h-5 w-5 text-red-400" />
@@ -65,7 +87,7 @@ const Header = () => {
         </div>
       </div>
       
-      {/* Menu mobil (opțional) */}
+      {/* Menu mobil */}
       <div className="md:hidden border-t border-gray-200">
         <div className="px-2 pt-2 pb-3 space-y-1">
           <Link 
@@ -80,6 +102,17 @@ const Header = () => {
           >
             Projects
           </Link>
+          
+          {/* Buton deconectare în menu mobil */}
+          {username && (
+            <button
+              onClick={handleLogout}
+              className="flex items-center space-x-2 w-full text-left px-3 py-2 rounded-md text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <ArrowRightOnRectangleIcon className="h-5 w-5" />
+              <span>Deconectare</span>
+            </button>
+          )}
         </div>
       </div>
     </header>
