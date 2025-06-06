@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Comment = require('../models/Comment');
+const Comment = require('../Models/Comment');
 
 // Middleware de auth cu debugging complet
 const auth = async (req, res, next) => {
