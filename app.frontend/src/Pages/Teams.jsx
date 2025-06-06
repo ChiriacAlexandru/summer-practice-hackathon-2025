@@ -18,6 +18,7 @@ const Teams = () => {
   const [newTeamDescription, setNewTeamDescription] = useState("");
   const [showSidebar, setShowSidebar] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingTeamDetails, setLoadingTeamDetails] = useState(false);
 
   const [myTeams, setMyTeams] = useState([]);
   const [availableTeams, setAvailableTeams] = useState([]);
@@ -33,35 +34,87 @@ const Teams = () => {
     return colors[Math.floor(Math.random() * colors.length)];
   };
 
+  // Helper pentru a obține datele echipei pentru afișare
+  const getTeamDisplayData = (teamId) => {
+    const teamFromMyTeams = myTeams.find(t => t._id === teamId);
+    const teamFromAvailable = availableTeams.find(t => t._id === teamId);
+    const team = teamFromMyTeams || teamFromAvailable;
+    
+    if (!team) return null;
+    
+    return {
+      name: team.name,
+      description: team.description,
+      color: team.color,
+      avatar: team.avatar,
+      role: team.role || "member",
+      memberCount: team.memberCount,
+      projectCount: team.projectCount
+    };
+  };
+
+  // Debug useEffect pentru currentUser
+  useEffect(() => {
+    console.log("Current user in Teams component:", currentUser);
+    if (currentUser) {
+      console.log("User ID variants:", {
+        _id: currentUser._id,
+        id: currentUser.id,
+        userId: currentUser.userId
+      });
+    }
+  }, [currentUser]);
+
   // Fetch toate echipele
   const fetchTeams = async () => {
     setIsLoading(true);
     try {
       const response = await axios.get(API_URL);
       const allTeams = response.data;
-      const myId = currentUser?._id || currentUser?.id;
+      const myId = currentUser?._id || currentUser?.id || currentUser?.userId;
+      
+      console.log("All teams:", allTeams);
+      console.log("My ID:", myId);
+      
       // Filtrare echipe proprii și disponibile
-      const userTeams = allTeams.filter(team =>
-        team.members.some(member =>
-          (member._id || member.id || member) === myId
-        )
-      );
-      const otherTeams = allTeams.filter(team =>
-        !team.members.some(member =>
-          (member._id || member.id || member) === myId
-        )
-      );
+      const userTeams = allTeams.filter(team => {
+        // Verifică dacă utilizatorul este în lista de membri
+        const isMember = team.members.some(member => {
+          const memberId = member._id || member.id || member;
+          return memberId === myId;
+        });
+        
+        // Sau dacă utilizatorul este creator-ul echipei
+        const isCreator = (team.createdBy?._id || team.createdBy?.id || team.createdBy) === myId;
+        
+        return isMember || isCreator;
+      });
+      
+      const otherTeams = allTeams.filter(team => {
+        const isMember = team.members.some(member => {
+          const memberId = member._id || member.id || member;
+          return memberId === myId;
+        });
+        const isCreator = (team.createdBy?._id || team.createdBy?.id || team.createdBy) === myId;
+        
+        return !isMember && !isCreator;
+      });
+      
+      console.log("User teams:", userTeams);
+      console.log("Other teams:", otherTeams);
+      
       setMyTeams(
         userTeams.map(team => ({
           ...team,
           memberCount: team.members.length,
           projectCount: team.projects?.length || 0,
-          role: (team.createdBy._id || team.createdBy.id || team.createdBy) === myId ? "admin" : "member",
+          role:(team.createdBy?._id || team.createdBy?.id || team.createdBy) === myId ? "admin" : "member",
           avatar: team.name.substring(0, 2).toUpperCase(),
           color: getRandomColor(),
           createdAt: new Date(team.createdAt).toISOString().split("T")[0]
         }))
       );
+      
       setAvailableTeams(
         otherTeams.map(team => ({
           ...team,
@@ -69,42 +122,103 @@ const Teams = () => {
           projectCount: team.projects?.length || 0,
           avatar: team.name.substring(0, 2).toUpperCase(),
           color: getRandomColor(),
-          isPublic: team.isPublic || false,
+          isPublic: team.isPublic !== false, // Default la true dacă nu e specificat
           tags: team.tags || []
         }))
       );
+      
       setPendingRequests([]);
     } catch (error) {
       console.error("Error fetching teams:", error);
+      alert("Eroare la încărcarea echipelor!");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fetch detalii echipă
+  // Fetch detalii echipă - versiunea reparată
   const fetchTeamDetails = async (teamId) => {
+    setLoadingTeamDetails(true);
     try {
+      console.log(`Fetching team details for ID: ${teamId}`);
       const response = await axios.get(`${API_URL}/${teamId}`);
+      console.log('Team details response:', response.data);
+      
       const team = response.data;
+      
+      // Verifică dacă răspunsul e valid
+      if (!team) {
+        console.error('No team data received');
+        // Setează detalii goale pentru a afișa măcar ceva
+        setTeamDetails(prev => ({
+          ...prev,
+          [teamId]: {
+            members: [],
+            projects: []
+          }
+        }));
+        return;
+      }
+      
+      // Procesează membrii cu error handling îmbunătățit
+      const processedMembers = Array.isArray(team.members)
+        ? team.members.map((member, index) => {
+            // Handle different member object structures
+            const memberObj = typeof member === 'object' ? member : { _id: member };
+            const memberId = memberObj._id || memberObj.id || member;
+            const memberName = memberObj.name || memberObj.username || memberObj.email || `User ${index + 1}`;
+            
+            return {
+              id: memberId,
+              name: memberName,
+              role: (team.createdBy?._id || team.createdBy?.id || team.createdBy) === memberId ? "admin" : "member",
+              avatar: memberName.length >= 2 ? 
+                      memberName.substring(0, 2).toUpperCase() : 
+                      "U" + (index + 1),
+              joinedAt: memberObj.joinedAt || team.createdAt || new Date().toISOString()
+            };
+          })
+        : [];
+
+      // Procesează proiectele
+      const processedProjects = Array.isArray(team.projects)
+        ? team.projects.map((project, index) => ({
+            id: project._id || project.id || `project-${index}`,
+            name: project.name || `Project ${index + 1}`,
+            status: project.status || "active",
+            tech: Array.isArray(project.tech) ? project.tech : [],
+            description: project.description || ""
+          }))
+        : [];
+      
       setTeamDetails(prev => ({
         ...prev,
         [teamId]: {
-          members: Array.isArray(team.members)
-            ? team.members.map(member => ({
-              id: member._id || member.id || member,
-              name: typeof member === "object" ? member.name : "Member",
-              role: (team.createdBy._id || team.createdBy.id || team.createdBy) === (member._id || member.id || member) ? "admin" : "member",
-              avatar: typeof member === "object"
-                ? member.name.substring(0, 2).toUpperCase()
-                : "ME",
-              joinedAt: new Date(team.createdAt).toISOString().split("T")[0]
-            }))
-            : [],
-          projects: team.projects || []
+          members: processedMembers,
+          projects: processedProjects
         }
       }));
+      
+      console.log('Processed team details:', {
+        members: processedMembers,
+        projects: processedProjects
+      });
+      
     } catch (error) {
       console.error("Error fetching team details:", error);
+      // În caz de eroare, setează detalii goale dar cu structura corectă
+      setTeamDetails(prev => ({
+        ...prev,
+        [teamId]: {
+          members: [],
+          projects: []
+        }
+      }));
+      
+      // Poți să afișezi un mesaj de eroare sau să folosești datele deja disponibile
+      alert("Nu s-au putut încărca detaliile echipei. Se vor folosi informațiile de bază.");
+    } finally {
+      setLoadingTeamDetails(false);
     }
   };
 
@@ -112,110 +226,154 @@ const Teams = () => {
     if (!currentUser) return;
     fetchTeams();
     // eslint-disable-next-line
-  }, [currentUser?._id, currentUser?.id]);
+  }, [currentUser?._id, currentUser?.id, currentUser?.userId]);
 
-  useEffect(() => {
-    if (selectedTeam) {
-      fetchTeamDetails(selectedTeam);
+  // Funcție îmbunătățită pentru selectarea echipei
+  const handleSelectTeam = async (teamId) => {
+    console.log("Selecting team:", teamId);
+    setSelectedTeam(teamId);
+    setShowSidebar(true);
+    
+    // Verifică dacă deja avem detaliile pentru această echipă
+    if (!teamDetails[teamId]) {
+      await fetchTeamDetails(teamId);
     }
-    // eslint-disable-next-line
-  }, [selectedTeam]);
+  };
 
-  // Alătură-te la echipă
+  // Alătură-te la echipă - versiunea îmbunătățită
   const handleJoinTeam = async (teamId) => {
     try {
       const team = availableTeams.find(t => t._id === teamId);
-      if (!team) return;
-      const userId = currentUser?._id || currentUser?.id;
+      if (!team) {
+        alert("Echipa nu a fost găsită!");
+        return;
+      }
+      
+      const userId = currentUser?._id || currentUser?.id || currentUser?.userId;
+      if (!userId) {
+        alert("Nu s-a putut determina ID-ul utilizatorului!");
+        return;
+      }
+      
+      console.log("Joining team:", teamId, "with user:", userId);
+      
       if (team.isPublic) {
-        await axios.post(`${API_URL}/${teamId}/members`, { userId });
-        setMyTeams([
-          ...myTeams,
-          {
-            ...team,
-            role: "member",
-            createdAt: new Date().toISOString().split("T")[0]
-          }
-        ]);
-        setAvailableTeams(availableTeams.filter(t => t._id !== teamId));
+        // Pentru echipe publice - alătură-te direct
+        const response = await axios.post(`${API_URL}/${teamId}/members`, { 
+          userId: userId 
+        });
+        
+        console.log("Join response:", response.data);
+        
+        // Creează obiectul echipei pentru UI
+        const joinedTeam = {
+          ...team,
+          role: "member",
+          createdAt: new Date().toISOString().split("T")[0],
+          memberCount: team.memberCount + 1 // Incrementează numărul de membri
+        };
+        
+        // Adaugă echipa la "Echipele Mele"
+        setMyTeams(prevTeams => [...prevTeams, joinedTeam]);
+        
+        // Elimină echipa din "Echipe Disponibile"
+        setAvailableTeams(prevTeams => prevTeams.filter(t => t._id !== teamId));
+        
+        // Schimbă automat tab-ul la "Echipele Mele"
+        setActiveTab("my-teams");
+        
+        alert(`Te-ai alăturat cu succes echipei "${team.name}"!`);
+        
       } else {
-        setPendingRequests([...pendingRequests, {
+        // Pentru echipe private - trimite cerere
+        await axios.post(`${API_URL}/${teamId}/requests`, { 
+          userId: userId 
+        });
+        
+        // Adaugă cererea la lista de cereri pending
+        const newRequest = {
           teamId,
           teamName: team.name,
           status: "pending",
           requestedAt: new Date().toISOString().split("T")[0]
-        }]);
+        };
+        
+        setPendingRequests(prevRequests => [...prevRequests, newRequest]);
+        
+        alert(`Cererea de alăturare la echipa "${team.name}" a fost trimisă!`);
       }
+      
     } catch (error) {
       console.error("Error joining team:", error);
+      if (error.response) {
+        console.error("Backend error:", error.response.data);
+        alert(`Eroare la alăturarea în echipă: ${error.response.data.message || 'Eroare necunoscută'}`);
+      } else {
+        alert("Eroare de conexiune la server!");
+      }
     }
   };
 
-  // Creează echipă nouă
- // Înlocuiește funcția handleCreateTeam cu aceasta:
-const handleCreateTeam = async () => {
-  if (!newTeamName.trim()) {
-    alert("Numele echipei nu poate fi gol!");
-    return;
-  }
-  
-  // Verificări îmbunătățite pentru user autentificat
-  if (!currentUser) {
-    alert("Trebuie să fii autentificat pentru a crea o echipă!");
-    return;
-  }
-  
-  // Obține ID-ul utilizatorului cu multiple fallback-uri
-  const userId = currentUser._id || currentUser.id || currentUser.userId;
-  
-  if (!userId) {
-    console.error("Current user object:", currentUser);
-    alert("Nu s-a putut determina ID-ul utilizatorului. Te rog să te autentifici din nou.");
-    return;
-  }
-  
-  try {
-    const newTeamData = {
-      name: newTeamName,
-      description: newTeamDescription,
-      createdBy: userId,
-      isPublic: true
-    };
-    
-    console.log('Current user:', currentUser);
-    console.log('User ID:', userId);
-    console.log('Payload trimis spre backend:', newTeamData);
-    
-    const response = await axios.post(API_URL, newTeamData);
-    const createdTeam = response.data;
-    
-    const uiTeam = {
-      ...createdTeam,
-      memberCount: 1,
-      projectCount: 0,
-      role: "admin",
-      avatar: newTeamName.substring(0, 2).toUpperCase(),
-      color: "bg-indigo-500",
-      createdAt: new Date(createdTeam.createdAt).toISOString().split("T")[0]
-    };
-    
-    setMyTeams([...myTeams, uiTeam]);
-    setNewTeamName("");
-    setNewTeamDescription("");
-    setShowCreateModal(false);
-  } catch (error) {
-    if (error.response) {
-      console.error("Error creating team:", error.response.data);
-      alert("Eroare backend: " + JSON.stringify(error.response.data, null, 2));
-    } else {
-      console.error("Error creating team:", error);
-      alert("Eroare necunoscută la creare echipă!");
+  // Creează echipă nouă - versiunea îmbunătățită
+  const handleCreateTeam = async () => {
+    if (!newTeamName.trim()) {
+      alert("Numele echipei nu poate fi gol!");
+      return;
     }
-  }
-};
-  const handleSelectTeam = (teamId) => {
-    setSelectedTeam(teamId);
-    setShowSidebar(true);
+    
+    if (!currentUser) {
+      alert("Trebuie să fii autentificat pentru a crea o echipă!");
+      return;
+    }
+    
+    const userId = currentUser._id || currentUser.id || currentUser.userId;
+    
+    if (!userId) {
+      console.error("Current user object:", currentUser);
+      alert("Nu s-a putut determina ID-ul utilizatorului!");
+      return;
+    }
+    
+    try {
+      const newTeamData = {
+        name: newTeamName,
+        description: newTeamDescription,
+        createdBy: userId,
+        isPublic: true
+      };
+      
+      console.log('Creating team with data:', newTeamData);
+      
+      const response = await axios.post(API_URL, newTeamData);
+      const createdTeam = response.data;
+      
+      console.log('Created team response:', createdTeam);
+      
+      const uiTeam = {
+        ...createdTeam,
+        memberCount: 1,
+        projectCount: 0,
+        role: "admin",
+        avatar: newTeamName.substring(0, 2).toUpperCase(),
+        color: "bg-indigo-500",
+        createdAt: new Date(createdTeam.createdAt).toISOString().split("T")[0]
+      };
+      
+      setMyTeams(prevTeams => [...prevTeams, uiTeam]);
+      setNewTeamName("");
+      setNewTeamDescription("");
+      setShowCreateModal(false);
+      
+      alert(`Echipa "${newTeamName}" a fost creată cu succes!`);
+      
+    } catch (error) {
+      console.error("Error creating team:", error);
+      if (error.response) {
+        alert(`Eroare backend: ${error.response.data.message || JSON.stringify(error.response.data)}`);
+      } else {
+        alert("Eroare necunoscută la creare echipă!");
+      }
+    }
   };
 
   const filteredAvailableTeams = availableTeams.filter(team =>
@@ -270,7 +428,7 @@ const handleCreateTeam = async () => {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">Echipe</h1>
-                <p className="text-gray-600">Gestionează echipele și colaborează cu alți developeri</p>
+                <p className="text-gray-600">Descoperă echipele disponibile și alătură-te lor</p>
               </div>
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -523,72 +681,246 @@ const handleCreateTeam = async () => {
                 </div>
               )}
             </div>
-            {/* Sidebar Detalii - doar desktop */}
+            {/* Sidebar Detalii - desktop - versiunea reparată */}
             <div className="hidden xl:block xl:col-span-1">
-              {selectedTeam && teamDetails[selectedTeam] ? (
+              {selectedTeam ? (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-6">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-gray-900">Detalii Echipă</h3>
                     <button
-                      onClick={() => setSelectedTeam(null)}
+                      onClick={() => {
+                        setSelectedTeam(null);
+                        setShowSidebar(false);
+                      }}
                       className="text-gray-400 hover:text-gray-600"
                     >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
+                  
+                  {loadingTeamDetails ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+                      <p className="mt-2 text-sm text-gray-600">Se încarcă detaliile...</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Team Info */}
+                      <div className="mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                          {(() => {
+                            const teamDisplayData = getTeamDisplayData(selectedTeam);
+                            return teamDisplayData ? (
+                              <>
+                                <div className={`w-10 h-10 ${teamDisplayData.color} rounded-lg flex items-center justify-center text-white font-bold`}>
+                                  {teamDisplayData.avatar}
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-gray-900">{teamDisplayData.name}</h4>
+                                  <p className="text-sm text-gray-600">
+                                    {teamDisplayData.role === "admin" ? "Administrator" : "Membru"}
+                                  </p>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="w-10 h-10 bg-gray-300 rounded-lg flex items-center justify-center text-white font-bold">
+                                  TM
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-gray-900">Echipă</h4>
+                                  <p className="text-sm text-gray-600">Membru</p>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      
+                      {/* Members */}
+                      <div className="mb-6">
+                        <h4 className="font-medium text-gray-900 mb-3">
+                          Membri ({teamDetails[selectedTeam]?.members?.length || 0})
+                        </h4>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {teamDetails[selectedTeam]?.members?.length > 0 ? (
+                            teamDetails[selectedTeam].members.map(member => (
+                              <div key={member.id} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
+                                    {member.avatar}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-900">{member.name}</p>
+                                    <p className="text-xs text-gray-500">
+                                      {new Date(member.joinedAt).toLocaleDateString("ro-RO")}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className={`px-2 py-1 rounded text-xs flex items-center ${
+                                  member.role === "admin"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-green-100 text-green-800"
+                                }`}>
+                                  {member.role === "admin" ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500">Nu s-au putut încărca membrii</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Projects */}
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-3">
+                          Proiecte ({teamDetails[selectedTeam]?.projects?.length || 0})
+                        </h4>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {teamDetails[selectedTeam]?.projects?.length > 0 ? (
+                            teamDetails[selectedTeam].projects.map(project => (
+                              <div key={project.id} className="border border-gray-200 rounded-lg p-3">
+                                <h5 className="font-medium text-gray-900 text-sm">{project.name}</h5>
+                                <div className="flex items-center justify-between mt-2">
+                                  <div className="flex flex-wrap gap-1">
+                                    {project.tech && project.tech.map(tech => (
+                                      <span key={tech} className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                                        {tech}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <span className={`px-2 py-1 rounded text-xs ${
+                                    project.status === "active" ? "bg-green-100 text-green-800" :
+                                    project.status === "completed" ? "bg-blue-100 text-blue-800" :
+                                    "bg-yellow-100 text-yellow-800"
+                                  }`}>
+                                    {project.status}
+                                  </span>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500">Nu există proiecte în această echipă</p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-6">
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">Selectează o echipă pentru a vedea detaliile</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Mobile Sidebar Overlay - versiunea reparată */}
+      {showSidebar && selectedTeam && (
+        <div className="xl:hidden fixed inset-0 bg-black bg-opacity-50 z-50">
+          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white shadow-lg overflow-y-auto">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Detalii Echipă</h3>
+                <button
+                  onClick={() => setShowSidebar(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {loadingTeamDetails ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-600">Se încarcă detaliile...</p>
+                </div>
+              ) : (
+                <>
                   {/* Team Info */}
                   <div className="mb-6">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className={`w-10 h-10 ${myTeams.find(t => t._id === selectedTeam)?.color || "bg-blue-500"} rounded-lg flex items-center justify-center text-white font-bold`}>
-                        {myTeams.find(t => t._id === selectedTeam)?.avatar || "TM"}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900">
-                          {myTeams.find(t => t._id === selectedTeam)?.name || "Team"}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {myTeams.find(t => t._id === selectedTeam)?.role === "admin" ? "Administrator" : "Membru"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Members */}
-                  <div className="mb-6">
-                    <h4 className="font-medium text-gray-900 mb-3">Membri ({teamDetails[selectedTeam].members.length})</h4>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {teamDetails[selectedTeam].members.map(member => (
-                        <div key={member.id} className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
-                              {member.avatar}
+                      {(() => {
+                        const teamDisplayData = getTeamDisplayData(selectedTeam);
+                        return teamDisplayData ? (
+                          <>
+                            <div className={`w-10 h-10 ${teamDisplayData.color} rounded-lg flex items-center justify-center text-white font-bold`}>
+                              {teamDisplayData.avatar}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-gray-900">{member.name}</p>
-                              <p className="text-xs text-gray-500">
-                                {new Date(member.joinedAt).toLocaleDateString("ro-RO")}
+                              <h4 className="font-semibold text-gray-900">{teamDisplayData.name}</h4>
+                              <p className="text-sm text-gray-600">
+                                {teamDisplayData.role === "admin" ? "Administrator" : "Membru"}
                               </p>
                             </div>
-                          </div>
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            member.role === "admin"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-green-100 text-green-800"
-                          }`}>
-                            {member.role === "admin" ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                          </span>
-                        </div>
-                      ))}
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 bg-gray-300 rounded-lg flex items-center justify-center text-white font-bold">
+                              TM
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-gray-900">Echipă</h4>
+                              <p className="text-sm text-gray-600">Membru</p>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
+                  
+                  {/* Members */}
+                  <div className="mb-6">
+                    <h4 className="font-medium text-gray-900 mb-3">
+                      Membri ({teamDetails[selectedTeam]?.members?.length || 0})
+                    </h4>
+                    <div className="space-y-2">
+                      {teamDetails[selectedTeam]?.members?.length > 0 ? (
+                        teamDetails[selectedTeam].members.map(member => (
+                          <div key={member.id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
+                                {member.avatar}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{member.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(member.joinedAt).toLocaleDateString("ro-RO")}
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`px-2 py-1 rounded text-xs flex items-center ${
+                              member.role === "admin"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-green-100 text-green-800"
+                            }`}>
+                              {member.role === "admin" ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">Nu s-au putut încărca membrii</p>
+                      )}
+                    </div>
+                  </div>
+                  
                   {/* Projects */}
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-3">Proiecte ({teamDetails[selectedTeam].projects.length})</h4>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {teamDetails[selectedTeam].projects.length > 0 ? (
+                    <h4 className="font-medium text-gray-900 mb-3">
+                      Proiecte ({teamDetails[selectedTeam]?.projects?.length || 0})
+                    </h4>
+                    <div className="space-y-2">
+                      {teamDetails[selectedTeam]?.projects?.length > 0 ? (
                         teamDetails[selectedTeam].projects.map(project => (
                           <div key={project.id} className="border border-gray-200 rounded-lg p-3">
                             <h5 className="font-medium text-gray-900 text-sm">{project.name}</h5>
-                            <div className="flex items-center justify-between mt-2">
+                            <div className="flex flex-col gap-2 mt-2">
                               <div className="flex flex-wrap gap-1">
                                 {project.tech && project.tech.map(tech => (
                                   <span key={tech} className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
@@ -596,7 +928,7 @@ const handleCreateTeam = async () => {
                                   </span>
                                 ))}
                               </div>
-                              <span className={`px-2 py-1 rounded text-xs ${
+                              <span className={`px-2 py-1 rounded text-xs self-start ${
                                 project.status === "active" ? "bg-green-100 text-green-800" :
                                 project.status === "completed" ? "bg-blue-100 text-blue-800" :
                                 "bg-yellow-100 text-yellow-800"
@@ -611,114 +943,13 @@ const handleCreateTeam = async () => {
                       )}
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-6">
-                  <div className="text-center py-8">
-                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">Selectează o echipă pentru a vedea detaliile</p>
-                  </div>
-                </div>
+                </>
               )}
             </div>
           </div>
         </div>
-      </div>
-      {/* Mobile Sidebar Overlay */}
-      {showSidebar && selectedTeam && teamDetails[selectedTeam] && (
-        <div className="xl:hidden fixed inset-0 bg-black bg-opacity-50 z-50">
-          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white shadow-lg overflow-y-auto">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Detalii Echipă</h3>
-                <button
-                  onClick={() => setShowSidebar(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              {/* Team Info */}
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-10 h-10 ${myTeams.find(t => t._id === selectedTeam)?.color || "bg-blue-500"} rounded-lg flex items-center justify-center text-white font-bold`}>
-                    {myTeams.find(t => t._id === selectedTeam)?.avatar || "TM"}
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">
-                      {myTeams.find(t => t._id === selectedTeam)?.name || "Team"}
-                    </h4>
-                    <p className="text-sm text-gray-600">
-                      {myTeams.find(t => t._id === selectedTeam)?.role === "admin" ? "Administrator" : "Membru"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              {/* Members */}
-              <div className="mb-6">
-                <h4 className="font-medium text-gray-900 mb-3">
-                  Membri ({teamDetails[selectedTeam].members.length})
-                </h4>
-                <div className="space-y-2">
-                  {teamDetails[selectedTeam].members.map(member => (
-                    <div key={member.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-sm font-medium">
-                          {member.avatar}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{member.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(member.joinedAt).toLocaleDateString("ro-RO")}
-                          </p>
-                        </div>
-                      </div>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        member.role === "admin"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-green-100 text-green-800"
-                      }`}>
-                        {member.role === "admin" ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {/* Projects */}
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Proiecte ({teamDetails[selectedTeam].projects.length})</h4>
-                <div className="space-y-2">
-                  {teamDetails[selectedTeam].projects.length > 0 ? (
-                    teamDetails[selectedTeam].projects.map(project => (
-                      <div key={project.id} className="border border-gray-200 rounded-lg p-3">
-                        <h5 className="font-medium text-gray-900 text-sm">{project.name}</h5>
-                        <div className="flex flex-col gap-2 mt-2">
-                          <div className="flex flex-wrap gap-1">
-                            {project.tech && project.tech.map(tech => (
-                              <span key={tech} className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
-                                {tech}
-                              </span>
-                            ))}
-                          </div>
-                          <span className={`px-2 py-1 rounded text-xs self-start ${
-                            project.status === "active" ? "bg-green-100 text-green-800" :
-                            project.status === "completed" ? "bg-blue-100 text-blue-800" :
-                            "bg-yellow-100 text-yellow-800"
-                          }`}>
-                            {project.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500">Nu există proiecte în această echipă</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
+      
       {/* Create Team Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
