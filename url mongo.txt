@@ -1,0 +1,1 @@
+mongodb+srv://alexandru:gitgutpass@gitgud.pfj46ad.mongodb.net/
