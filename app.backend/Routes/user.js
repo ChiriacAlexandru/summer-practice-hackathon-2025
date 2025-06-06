@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../Models/User');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
 
 // POST /api/users - Creare utilizator
 router.post('/', async (req, res) => {
@@ -39,5 +42,37 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Eroare la obținerea utilizatorilor.' });
   }
 });
+
+
+
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password)
+    return res.status(400).json({ error: 'Email și parola sunt necesare.' });
+
+  try {
+    const user = await User.findOne({ email }).select('+passwordHash');
+    if (!user)
+      return res.status(401).json({ error: 'Email sau parolă incorecte.' });
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch)
+      return res.status(401).json({ error: 'Email sau parolă incorecte.' });
+
+    // Creează un token JWT
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      'cheie_secreta_super_sigura', // Păstrează secretul într-o variabilă de mediu
+      { expiresIn: '2h' }
+    );
+
+    res.json({ message: 'Autentificare reușită.', token, user: { username: user.username, email: user.email, role: user.role } });
+  } catch (err) {
+    console.error('Eroare la login:', err);
+    res.status(500).json({ error: 'Eroare server la autentificare.' });
+  }
+});
+
 
 module.exports = router;
