@@ -16,17 +16,16 @@ app.use(cors({
 
 // Importă rutele
 const usersRouter = require('./Routes/user');
-// Dacă ai și alte rute, le poți decommenta
 // const projectsRouter = require('./Routes/routes');
 // const suggestionsRouter = require('./Routes/suggestion');
 // const commentsRouter = require('./Routes/comment');
-// const teamsRouter = require('./Routes/team');
+const teamsRouter = require('./Routes/team');
 
 app.use('/api/users', usersRouter);
 // app.use('/api/projects', projectsRouter);
 // app.use('/api/suggestions', suggestionsRouter);
 // app.use('/api/comments', commentsRouter);
-// app.use('/api/teams', teamsRouter);
+app.use('/api/teams', teamsRouter);
 
 // Conectare la MongoDB
 const connectDB = async () => {
